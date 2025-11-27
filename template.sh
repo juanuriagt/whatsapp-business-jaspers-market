@@ -1,14 +1,27 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+[ -f .env ] && set -a && . ./.env && set +a
 
 # Copyright 2021-present, Facebook, Inc. All rights reserved.
 
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-APPTOKEN="<APP_TOKEN>"
-APPID="<APP_ID>"
-WABAID="<WABA_ID>"
-APIVERSION="<CLOUD_API_VERSION>"
+APPTOKEN="${APPTOKEN:-${ACCESS_TOKEN}}"
+APPID="${APPID:-${APP_ID}}"
+WABAID="${WABAID:-${WABA_ID}}"
+APIVERSION="${APIVERSION:-${CLOUD_API_VERSION:-v20.0}}"
+
+missing=""
+[ -z "$APPTOKEN" ] && missing="$missing APPTOKEN/ACCESS_TOKEN"
+[ -z "$APPID" ] && missing="$missing APPID/APP_ID"
+[ -z "$WABAID" ] && missing="$missing WABAID/WABA_ID"
+[ -z "$APIVERSION" ] && missing="$missing APIVERSION/CLOUD_API_VERSION"
+if [ -n "$missing" ]; then
+  echo "Missing required configuration:$missing"
+  echo "Please export the variables or define them in .env (ACCESS_TOKEN, APP_ID, WABA_ID, CLOUD_API_VERSION)."
+  exit 1
+fi
 
 echo "Downloading image assets from Meta"
 mkdir public
@@ -17,7 +30,11 @@ curl -o public/salad_bowl.jpg https://scontent.xx.fbcdn.net/mci_ab/uap/asset_man
 curl -o public/sheet_pan_dinner.jpg https://scontent.xx.fbcdn.net/mci_ab/uap/asset_manager/id/?ab_b=e\&ab_page=AssetManagerID\&ab_entry=1389202275965231
 curl -o public/strawberries.jpg https://scontent.xx.fbcdn.net/mci_ab/uap/asset_manager/id/?ab_b=e\&ab_page=AssetManagerID\&ab_entry=1393969325614091
 
-declare -A handles
+# Bash 3.2 compatibility: use dynamic variables instead of associative arrays
+get_handle() {
+  eval "echo \${handle_$1}"
+}
+
 for image in "groceries" "salad_bowl" "sheet_pan_dinner" "strawberries"; do
     echo "Uploading $image"
 
@@ -36,8 +53,7 @@ for image in "groceries" "salad_bowl" "sheet_pan_dinner" "strawberries"; do
     handle=$(echo "$upload_response" | jq -r '.h')
 
     echo "Handle: $handle"
-
-    handles["$image"]="$handle"
+    eval "handle_${image}=\"$handle\""
 done
 
 echo "Creating interactive media template"
@@ -54,7 +70,7 @@ curl -X POST "https://graph.facebook.com/${APIVERSION}/${WABAID}/message_templat
         "format": "image",
         "example": {
           "header_handle": [
-            "'"${handles["groceries"]}"'"
+            "'"$(get_handle groceries)"'"
           ]
         }
       },
@@ -103,7 +119,7 @@ curl -X POST "https://graph.facebook.com/${APIVERSION}/${WABAID}/message_templat
                             "format": "image",
                             "example": {
                                 "header_handle": [
-                                    "'"${handles["sheet_pan_dinner"]}"'"
+                                    "'"$(get_handle sheet_pan_dinner)"'"
                                 ]
                             }
                         },
@@ -130,7 +146,7 @@ curl -X POST "https://graph.facebook.com/${APIVERSION}/${WABAID}/message_templat
                             "format": "image",
                             "example": {
                                 "header_handle": [
-                                    "'"${handles["salad_bowl"]}"'"
+                                "'"$(get_handle salad_bowl)"'"
                                 ]
                             }
                         },
@@ -170,7 +186,7 @@ curl -X POST "https://graph.facebook.com/${APIVERSION}/${WABAID}/message_templat
         "format": "image",
         "example": {
           "header_handle": [
-            "'"${handles["strawberries"]}"'"
+            "'"$(get_handle strawberries)"'"
           ]
         }
       },
